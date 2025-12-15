@@ -243,6 +243,17 @@ def find_all_images(text: str) -> list[str]:
         urls.append(match.group(1))
     return urls
 
+def find_uploaded_files(text: str) -> list[str]:
+    """
+    Find all GitHub file upload URLs in text (images or other files).
+    Returns list of URLs.
+    """
+    if not text:
+        return []
+    # GitHub upload URLs pattern
+    file_url_pattern = re.compile(r'https?://(?:github\.com/[^/]+/[^/]+/files/\d+/[^)\s]+|github\.com/user-attachments/[^)\s]+)')
+    return file_url_pattern.findall(text)
+
 def download_image_if_present(markdown_or_html: str, validate_only: bool = False) -> tuple[str, list[str]]:
     """
     Looks for an image URL in markdown or HTML; downloads to assets/uploads/.
@@ -504,28 +515,28 @@ def main() -> int:
     
     for field_name, field_value in content_fields_to_check:
         if field_value:
-            images_in_content = find_all_images(field_value)
-            if images_in_content:
-                dprint(f"Found {len(images_in_content)} image(s) in {field_name}")
-                for img_url in images_in_content:
-                    is_valid, error_msg = validate_image_format(img_url)
+            # Check for any file uploads (including non-images like .txt)
+            all_files = find_uploaded_files(field_value)
+            if all_files:
+                dprint(f"Found {len(all_files)} file(s) in {field_name}")
+                for file_url in all_files:
+                    # Check if it's a valid image format
+                    is_valid, error_msg = validate_image_format(file_url)
                     if not is_valid:
-                        validation_errors.append(f"**{field_name}**: {error_msg} (URL: {img_url})")
-                    else:
-                        validation_errors.append(
-                            f"**{field_name}**: Images should not be included in content fields. "
-                            f"Please use the dedicated image field instead. (URL: {img_url})"
-                        )
+                        # Invalid format (e.g., .txt, .pdf) - reject
+                        validation_errors.append(f"**{field_name}**: {error_msg} (URL: {file_url})")
+                    # Valid image formats are allowed in content fields
     
     # If there are validation errors, post a comment and exit
     if validation_errors:
-        error_message = "## ⚠️ Image Validation Failed\n\n"
-        error_message += "The following issues were found with images in your submission:\n\n"
+        error_message = "## ⚠️ File Validation Failed\n\n"
+        error_message += "The following issues were found with files in your submission:\n\n"
         for i, error in enumerate(validation_errors, 1):
             error_message += f"{i}. {error}\n"
         error_message += "\n### Required Actions:\n"
-        error_message += "- **Dedicated image field**: Only use supported formats (JPG, JPEG, PNG, GIF, WebP, SVG)\n"
-        error_message += "- **Content fields**: Do not include images in description or content fields. Use the dedicated image upload field instead.\n"
+        error_message += "- **All fields**: Only image files are allowed (JPG, JPEG, PNG, GIF, WebP, SVG)\n"
+        error_message += "- **Text files and documents**: Remove .txt, .pdf, .doc, and other non-image files\n"
+        error_message += "- **Images in content**: You CAN include images in description/content fields, just make sure they're valid image formats\n"
         error_message += "\n### Allowed Image Formats:\n"
         error_message += "✅ " + ", ".join(sorted(ALLOWED_IMAGE_FORMATS)) + "\n"
         error_message += "\nPlease update your issue to fix these issues. The automation will run again when you edit the issue."
