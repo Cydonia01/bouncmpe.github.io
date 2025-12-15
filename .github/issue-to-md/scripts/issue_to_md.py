@@ -259,12 +259,35 @@ def download_image_if_present(markdown_or_html: str, validate_only: bool = False
     if not markdown_or_html:
         return "", []
     
+    errors = []
+    
+    # First check: Look for ANY GitHub file upload URL (not just images)
+    # GitHub upload URLs look like: https://github.com/.../files/.../ or user-attachments
+    file_url_pattern = re.compile(r'https?://(?:github\.com/[^/]+/[^/]+/files/\d+/[^)\s]+|github\.com/user-attachments/[^)\s]+)')
+    file_matches = file_url_pattern.findall(markdown_or_html)
+    
+    if file_matches:
+        # Found file upload URL(s), validate each one
+        for file_url in file_matches:
+            dprint(f"Found file upload URL: {file_url}")
+            # Check if it has a valid image extension
+            path = Path(file_url.split("?")[0])
+            ext = path.suffix.lower()
+            if ext and ext not in ALLOWED_IMAGE_FORMATS:
+                errors.append(f"Invalid file type '{ext}' uploaded to image field. Only image files are allowed: {', '.join(sorted(ALLOWED_IMAGE_FORMATS))}")
+                dprint(f"Rejected non-image file: {ext}")
+                return "", errors
+    
+    # Now look for proper image markdown/HTML
     m = IMG_MD_RE.search(markdown_or_html) or IMG_SRC_RE.search(markdown_or_html)
     if not m:
+        # No image markdown found
+        if file_matches:
+            # We have file URLs but not in image format - warn about it
+            errors.append("File uploaded but not in proper image markdown format. Please use image files (JPG, PNG, GIF, WebP, SVG) and ensure they display as images in the preview.")
         return "", []
     
     url = m.group(1)
-    errors = []
     
     # Validate format
     is_valid, error_msg = validate_image_format(url)
@@ -421,7 +444,7 @@ def build_event_dir(base: Path, date_val: str, time_val: str, presenter: str, fa
     return base / "events" / f"{date_val}t{hhmmss}-{who}"
 
 def build_news_dir(base: Path, date_val: str, title_en: str) -> Path:
-    return base / "news" / f"{date_val}-news-{slugify(title_en)}"
+    return base / "news" / f"{date_val}-news-{slugify(title_en[:-3])}"
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Main
