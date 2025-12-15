@@ -507,10 +507,10 @@ def main() -> int:
     else:
         # News has description and content fields
         content_fields_to_check = [
-            ("description_en", get_field(fields, "description_en", "")),
-            ("description_tr", get_field(fields, "description_tr", "")),
-            ("content_en", get_field(fields, "content_en", "")),
-            ("content_tr", get_field(fields, "content_tr", "")),
+            ("short_description_en", get_field(fields, "short_description_en", "")),
+            ("short_description_tr", get_field(fields, "short_description_tr", "")),
+            ("full_content_en", get_field(fields, "full_content_en", "")),
+            ("full_content_tr", get_field(fields, "full_content_tr", "")),
         ]
     
     for field_name, field_value in content_fields_to_check:
