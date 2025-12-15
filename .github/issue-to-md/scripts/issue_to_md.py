@@ -466,18 +466,8 @@ def build_event_dir(base: Path, date_val: str, time_val: str, presenter: str, fa
 def build_news_dir(base: Path, date_val: str, title_en: str) -> Path:
     return base / "news" / f"{date_val}-news-{slugify(title_en[:-3])}"
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Main
-# ────────────────────────────────────────────────────────────────────────────────
-
-def main() -> int:
-    issue = load_issue()
-    fields = parse_fields(issue.body)
-    
-    # Collect all validation errors
-    validation_errors = []
-    
-    # Kind → event or news
+def _extract_basic_fields(fields: Dict[str, str], issue_title: str, issue_created_at: datetime) -> Dict[str, Any]:
+    """Extract and normalize basic fields from issue."""
     content_kind = get_field(fields, ["content_kind", "event_type"], "news").strip().lower()
     is_event = content_kind in EVENT_KINDS
     
