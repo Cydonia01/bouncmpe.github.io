@@ -477,17 +477,22 @@ def main() -> int:
     
     # If there are validation errors, post a comment and exit
     if validation_errors:
-        error_message = "## Image Validation Failed\n\n"
+        error_message = "## ⚠️ Image Validation Failed\n\n"
         error_message += "The following issues were found with images in your submission:\n\n"
         for i, error in enumerate(validation_errors, 1):
             error_message += f"{i}. {error}\n"
         error_message += "\n### Required Actions:\n"
-        error_message += "- **Dedicated image field**: Only use supported formats (JPG, PNG, GIF, WebP, SVG)\n"
+        error_message += "- **Dedicated image field**: Only use supported formats (JPG, JPEG, PNG, GIF, WebP, SVG)\n"
         error_message += "- **Content fields**: Do not include images in description or content fields. Use the dedicated image upload field instead.\n"
-        error_message += "\nPlease update your issue and close/reopen it to trigger the automation again."
+        error_message += "\n### Allowed Image Formats:\n"
+        error_message += "✅ " + ", ".join(sorted(ALLOWED_IMAGE_FORMATS)) + "\n"
+        error_message += "\nPlease update your issue to fix these issues. The automation will run again when you edit the issue."
         
         post_issue_comment(issue.issue_obj, error_message)
-        print("Validation failed. Comment posted to issue.")
+        print("❌ Validation failed. Comment posted to issue.", file=sys.stderr)
+        print(f"Found {len(validation_errors)} validation error(s):", file=sys.stderr)
+        for error in validation_errors:
+            print(f"  - {error}", file=sys.stderr)
         return 1
 
     # Out directory by type
