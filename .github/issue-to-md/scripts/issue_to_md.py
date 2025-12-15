@@ -515,17 +515,23 @@ def main() -> int:
     
     for field_name, field_value in content_fields_to_check:
         if field_value:
+            dprint(f"Checking field '{field_name}', content length: {len(field_value)}")
+            dprint(f"Field content preview: {field_value[:200] if len(field_value) > 200 else field_value}")
             # Check for any file uploads (including non-images like .txt)
             all_files = find_uploaded_files(field_value)
+            dprint(f"Found {len(all_files)} file(s) in {field_name}: {all_files}")
             if all_files:
-                dprint(f"Found {len(all_files)} file(s) in {field_name}")
                 for file_url in all_files:
                     # Check if it's a valid image format
                     is_valid, error_msg = validate_image_format(file_url)
+                    dprint(f"File: {file_url}, Valid: {is_valid}, Error: {error_msg}")
                     if not is_valid:
                         # Invalid format (e.g., .txt, .pdf) - reject
                         validation_errors.append(f"**{field_name}**: {error_msg} (URL: {file_url})")
+                        dprint(f"Added validation error for {field_name}")
                     # Valid image formats are allowed in content fields
+        else:
+            dprint(f"Field '{field_name}' is empty")
     
     # If there are validation errors, post a comment and exit
     if validation_errors:
