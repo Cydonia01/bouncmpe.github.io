@@ -464,7 +464,7 @@ def build_event_dir(base: Path, date_val: str, time_val: str, presenter: str, fa
     return base / "events" / f"{date_val}t{hhmmss}-{who}"
 
 def build_news_dir(base: Path, date_val: str, title_en: str) -> Path:
-    return base / "news" / f"{date_val}-news-{slugify(title_en[:-3])}"
+    return base / "news" / f"{date_val}-news-{slugify(title_en)}"
 
 def _extract_basic_fields(fields: Dict[str, str], issue_title: str, issue_created_at: datetime) -> Dict[str, Any]:
     """Extract and normalize basic fields from issue."""
