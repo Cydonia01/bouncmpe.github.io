@@ -199,6 +199,16 @@ IMG_SRC_RE = re.compile(r'src="(https?://[^"]+)"')
 # Allowed image formats
 ALLOWED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 
+# Content-Type to extension mapping for common image types
+CONTENT_TYPE_TO_EXT = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+}
+
 def validate_image_format(url: str) -> tuple[bool, str]:
     """
     Validate if the image URL has an allowed format.
@@ -207,6 +217,11 @@ def validate_image_format(url: str) -> tuple[bool, str]:
     # Extract file extension from URL
     path = Path(url.split("?")[0])  # Remove query params
     ext = path.suffix.lower()
+    
+    # If no extension in URL, we'll validate during download via Content-Type
+    # So return True here and let download_image_if_present handle it
+    if not ext:
+        return True, ""
     
     if ext not in ALLOWED_IMAGE_FORMATS:
         return False, f"Invalid image format '{ext}'. Allowed formats: {', '.join(sorted(ALLOWED_IMAGE_FORMATS))}"
@@ -269,12 +284,16 @@ def download_image_if_present(markdown_or_html: str, validate_only: bool = False
         dprint("Downloading image:", url)
         resp = requests.get(url, timeout=20)
         resp.raise_for_status()
-        ctype = (resp.headers.get("Content-Type") or "").split(";")[0]
-        ext = mimetypes.guess_extension(ctype) or Path(url).suffix or ".png"
+        ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
+        dprint(f"Content-Type: {ctype}")
         
-        # Double-check the extension from content-type
+        # Use our mapping first, fallback to mimetypes, then URL extension
+        ext = CONTENT_TYPE_TO_EXT.get(ctype) or mimetypes.guess_extension(ctype) or Path(url).suffix or ".png"
+        dprint(f"Determined extension: {ext}")
+        
+        # Validate the extension
         if ext.lower() not in ALLOWED_IMAGE_FORMATS:
-            error_msg = f"Server returned invalid content type '{ctype}' with extension '{ext}'"
+            error_msg = f"Invalid image type. Server returned content type '{ctype}' (extension: '{ext}'). Allowed formats: {', '.join(sorted(ALLOWED_IMAGE_FORMATS))}"
             errors.append(error_msg)
             dprint(error_msg)
             return "", errors
