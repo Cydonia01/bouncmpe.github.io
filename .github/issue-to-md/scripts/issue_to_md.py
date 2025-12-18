@@ -576,7 +576,7 @@ def _validate_dedicated_image_field(fields: Dict[str, str]) -> tuple[str, list[s
     return "", []
 
 def _validate_content_fields(fields: Dict[str, str], is_event: bool) -> list[str]:
-    """Validate content fields - block any image uploads in description/content fields."""
+    """Validate content fields for invalid file uploads."""
     if is_event:
         return []
     
@@ -594,18 +594,15 @@ def _validate_content_fields(fields: Dict[str, str], is_event: bool) -> list[str
             continue
             
         dprint(f"Checking field '{field_name}', content length: {len(field_value)}")
-        
-        # Check for any uploaded files (images or otherwise)
         all_files = find_uploaded_files(field_value)
         dprint(f"Found {len(all_files)} file(s) in {field_name}: {all_files}")
         
-        # Block ANY file uploads in description/content fields
-        if all_files:
-            validation_errors.append(
-                f"**{field_name}**: Images/files are not allowed in description or content fields. "
-                f"Please only use the dedicated 'Image' field for uploading images."
-            )
-            dprint(f"Blocked file upload in {field_name}")
+        for file_url in all_files:
+            is_valid, error_msg = validate_image_format(file_url)
+            dprint(f"File: {file_url}, Valid: {is_valid}, Error: {error_msg}")
+            if not is_valid:
+                validation_errors.append(f"**{field_name}**: {error_msg} (URL: {file_url})")
+                dprint(f"Added validation error for {field_name}")
     
     return validation_errors
 
@@ -618,7 +615,7 @@ def _post_validation_error(issue_obj: Any, validation_errors: list[str]) -> None
     error_message += "\n### Required Actions:\n"
     error_message += "- **All fields**: Only image files are allowed (JPG, JPEG, PNG, GIF, WebP, SVG)\n"
     error_message += "- **Text files and documents**: Remove .txt, .pdf, .doc, and other non-image files\n"
-    error_message += "- **Description/Content fields**: Do NOT upload images here - use only the dedicated 'Image' field\n"
+    error_message += "- **Images in content**: You CAN include images in description/content fields, just make sure they're valid image formats\n"
     error_message += "\n### Allowed Image Formats:\n"
     error_message += "✅ " + ", ".join(sorted(ALLOWED_IMAGE_FORMATS)) + "\n"
     error_message += "\n### 📐 Image Guidelines:\n"
