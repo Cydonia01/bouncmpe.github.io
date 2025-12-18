@@ -45,8 +45,7 @@ newsroom:
   limit: 3
   layout: card
   image_settings:
-    card: "800x600 webp q90 Smart" # 4:3 aspect ratio for news cards
-    hero: "1400x667 webp q90 Smart" # ~2.1:1 aspect ratio for hero/featured
+    hero: "1400x700 webp q90 Smart"
     quality: 90
 
 social:
