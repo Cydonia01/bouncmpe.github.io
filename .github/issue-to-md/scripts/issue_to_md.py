@@ -344,7 +344,6 @@ def _extract_image_url(markdown_or_html: str) -> Optional[str]:
 def _download_and_save_image(url: str, issue_number: int) -> tuple[str, list[str]]:
     """Download image, validate dimensions, and save to uploads directory."""
     errors = []
-    warnings = []
     try:
         dprint("Downloading image:", url)
         resp = requests.get(url, timeout=20)
@@ -366,15 +365,12 @@ def _download_and_save_image(url: str, issue_number: int) -> tuple[str, list[str
             dprint(error_msg)
             return "", errors
         
-        # Validate image dimensions
-        is_valid, dimension_messages = validate_image_dimensions(image_bytes)
-        if not is_valid:
-            # Critical dimension errors
-            errors.extend(dimension_messages)
-            return "", errors
-        else:
-            # Add warnings/recommendations (non-blocking)
-            warnings.extend(dimension_messages)
+        # Validate image dimensions (advisory only - just logs warnings, doesn't block)
+        _, dimension_messages = validate_image_dimensions(image_bytes)
+        if dimension_messages:
+            # Log warnings for debugging, but don't add to errors (non-blocking)
+            for msg in dimension_messages:
+                dprint(f"Image advisory: {msg}")
         
         fname = f"{issue_number}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}"
         ensure_dirs(UPLOADS_DIR)
@@ -383,14 +379,13 @@ def _download_and_save_image(url: str, issue_number: int) -> tuple[str, list[str
         rel = f"uploads/{fname}"
         dprint("Saved image to", path, "→", rel)
         
-        # Return warnings as part of the error list (but don't fail)
-        return rel, warnings
+        # Return empty error list since dimension checks are advisory only
+        return rel, []
         
     except Exception as e:
         error_msg = f"Failed to download image from {url}: {str(e)}"
         errors.append(error_msg)
         dprint(error_msg)
-        return "", errors
         return "", errors
 
 def download_image_if_present(markdown_or_html: str, validate_only: bool = False) -> tuple[str, list[str]]:
