@@ -201,9 +201,7 @@ IMG_SRC_RE = re.compile(r'src="(https?://[^"]+)"')
 # Allowed image formats
 ALLOWED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 
-# Minimum image dimensions (to work well with both aspect ratios)
-MIN_IMAGE_WIDTH = 1400
-MIN_IMAGE_HEIGHT = 600
+# Recommended image dimensions (advisory only - images are never blocked)
 RECOMMENDED_WIDTH = 2000
 RECOMMENDED_HEIGHT = 1200
 
@@ -243,9 +241,9 @@ def validate_image_dimensions(image_bytes: bytes) -> tuple[bool, list[str]]:
     """
     Validate image dimensions to ensure they work well with both aspect ratios.
     Returns (is_valid, list_of_warnings_or_errors).
+    All checks are advisory only - images are never blocked based on dimensions.
     """
     warnings = []
-    errors = []
     
     try:
         img = Image.open(BytesIO(image_bytes))
@@ -254,29 +252,21 @@ def validate_image_dimensions(image_bytes: bytes) -> tuple[bool, list[str]]:
         
         dprint(f"Image dimensions: {width}x{height} (aspect ratio: {aspect_ratio:.2f})")
         
-        # Check minimum dimensions
-        if width < MIN_IMAGE_WIDTH or height < MIN_IMAGE_HEIGHT:
-            errors.append(
-                f"⚠️ **Image too small:** {width}x{height}px. "
-                f"Minimum required: {MIN_IMAGE_WIDTH}x{MIN_IMAGE_HEIGHT}px. "
-                f"Small images will appear pixelated when displayed."
-            )
-        
-        # Check for portrait orientation (will not work well)
+        # Advisory: Check for portrait orientation (will not work well)
         if height > width:
-            errors.append(
-                f"⚠️ **Portrait orientation detected:** {width}x{height}px. "
-                f"Please use landscape (horizontal) images. Portrait images will be severely cropped."
+            warnings.append(
+                f"ℹ️ **Portrait orientation detected:** {width}x{height}px. "
+                f"Note: Landscape (horizontal) images work better. Portrait images may be severely cropped."
             )
         
-        # Check if dimensions are reasonable
+        # Advisory: Check if dimensions are below recommended size
         if width < RECOMMENDED_WIDTH or height < RECOMMENDED_HEIGHT:
             warnings.append(
                 f"ℹ️ **Recommendation:** Your image is {width}x{height}px. "
-                f"For best quality, use at least {RECOMMENDED_WIDTH}x{RECOMMENDED_HEIGHT}px."
+                f"For best quality, consider using at least {RECOMMENDED_WIDTH}x{RECOMMENDED_HEIGHT}px."
             )
         
-        # Check aspect ratio compatibility
+        # Advisory: Check aspect ratio compatibility
         # Good range: between 1.5:1 and 2.5:1 works well for both crops
         if aspect_ratio < 1.3:
             warnings.append(
@@ -294,7 +284,8 @@ def validate_image_dimensions(image_bytes: bytes) -> tuple[bool, list[str]]:
             1.5 <= aspect_ratio <= 2.3):
             dprint("Image dimensions are excellent for both layouts!")
         
-        return len(errors) == 0, errors + warnings
+        # Always return True - all checks are advisory only
+        return True, warnings
         
     except Exception as e:
         error_msg = f"Failed to validate image dimensions: {str(e)}"
