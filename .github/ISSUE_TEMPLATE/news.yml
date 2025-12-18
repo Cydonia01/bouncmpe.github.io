@@ -31,7 +31,19 @@ body:
     id: image_markdown
     attributes:
       label: "Image (drag & drop here)"
-      description: "Drag & drop your image; GitHub will upload it and provide a markdown link."
+      description: |
+        **⚠️ Image Requirements (Important)**
+        - Images are displayed in **two different layouts** on the website:
+          - **Hero / featured view:** ~**2.1:1** aspect ratio (e.g., 2100x1000px)
+          - **News card view:** ~**4:3** aspect ratio (e.g., 1200x900px)
+        - Please choose an image that:
+          - Has the **main subject centered**
+          - Can be **safely cropped** in both wide and standard ratios
+          - Is at least **1400px wide** for best quality
+        - Avoid images with important content near the edges
+        - Supported formats: JPG, PNG, GIF, WebP, SVG
+        
+        Drag & drop your image here; GitHub will upload it and provide a markdown link.
       placeholder: "![alt text](https://user-images.githubusercontent.com/.../your-image.png)"
     validations:
       required: true

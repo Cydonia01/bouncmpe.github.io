@@ -6,10 +6,12 @@ import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
+from io import BytesIO
 
 import requests
 from github import Github
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+from PIL import Image
 
 from datetime import datetime
 import zoneinfo
@@ -199,6 +201,16 @@ IMG_SRC_RE = re.compile(r'src="(https?://[^"]+)"')
 # Allowed image formats
 ALLOWED_IMAGE_FORMATS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 
+# Minimum image dimensions (to work well with both aspect ratios)
+MIN_IMAGE_WIDTH = 1400
+MIN_IMAGE_HEIGHT = 600
+RECOMMENDED_WIDTH = 2000
+RECOMMENDED_HEIGHT = 1200
+
+# Target aspect ratios for display
+HERO_ASPECT_RATIO = 2.1  # 2.1:1 (wide format for carousel)
+CARD_ASPECT_RATIO = 1.33  # 4:3 (standard format for cards)
+
 # Content-Type to extension mapping for common image types
 CONTENT_TYPE_TO_EXT = {
     "image/jpeg": ".jpg",
@@ -226,6 +238,68 @@ def validate_image_format(url: str) -> tuple[bool, str]:
     if ext not in ALLOWED_IMAGE_FORMATS:
         return False, f"Invalid image format '{ext}'. Allowed formats: {', '.join(sorted(ALLOWED_IMAGE_FORMATS))}"
     return True, ""
+
+def validate_image_dimensions(image_bytes: bytes) -> tuple[bool, list[str]]:
+    """
+    Validate image dimensions to ensure they work well with both aspect ratios.
+    Returns (is_valid, list_of_warnings_or_errors).
+    """
+    warnings = []
+    errors = []
+    
+    try:
+        img = Image.open(BytesIO(image_bytes))
+        width, height = img.size
+        aspect_ratio = width / height if height > 0 else 0
+        
+        dprint(f"Image dimensions: {width}x{height} (aspect ratio: {aspect_ratio:.2f})")
+        
+        # Check minimum dimensions
+        if width < MIN_IMAGE_WIDTH or height < MIN_IMAGE_HEIGHT:
+            errors.append(
+                f"⚠️ **Image too small:** {width}x{height}px. "
+                f"Minimum required: {MIN_IMAGE_WIDTH}x{MIN_IMAGE_HEIGHT}px. "
+                f"Small images will appear pixelated when displayed."
+            )
+        
+        # Check for portrait orientation (will not work well)
+        if height > width:
+            errors.append(
+                f"⚠️ **Portrait orientation detected:** {width}x{height}px. "
+                f"Please use landscape (horizontal) images. Portrait images will be severely cropped."
+            )
+        
+        # Check if dimensions are reasonable
+        if width < RECOMMENDED_WIDTH or height < RECOMMENDED_HEIGHT:
+            warnings.append(
+                f"ℹ️ **Recommendation:** Your image is {width}x{height}px. "
+                f"For best quality, use at least {RECOMMENDED_WIDTH}x{RECOMMENDED_HEIGHT}px."
+            )
+        
+        # Check aspect ratio compatibility
+        # Good range: between 1.5:1 and 2.5:1 works well for both crops
+        if aspect_ratio < 1.3:
+            warnings.append(
+                f"ℹ️ **Aspect ratio notice:** Your image is {aspect_ratio:.2f}:1 (nearly square). "
+                f"Some content may be cropped in the wide hero view (2.1:1)."
+            )
+        elif aspect_ratio > 2.5:
+            warnings.append(
+                f"ℹ️ **Aspect ratio notice:** Your image is {aspect_ratio:.2f}:1 (very wide). "
+                f"Some content may be cropped in the card view (4:3)."
+            )
+        
+        # Provide positive feedback for good images
+        if (width >= RECOMMENDED_WIDTH and height >= RECOMMENDED_HEIGHT and 
+            1.5 <= aspect_ratio <= 2.3):
+            dprint("Image dimensions are excellent for both layouts!")
+        
+        return len(errors) == 0, errors + warnings
+        
+    except Exception as e:
+        error_msg = f"Failed to validate image dimensions: {str(e)}"
+        dprint(error_msg)
+        return True, []  # Don't fail validation if we can't read dimensions
 
 def find_all_images(text: str) -> list[str]:
     """
@@ -277,14 +351,17 @@ def _extract_image_url(markdown_or_html: str) -> Optional[str]:
     return m.group(1) if m else None
 
 def _download_and_save_image(url: str, issue_number: int) -> tuple[str, list[str]]:
-    """Download image and save to uploads directory."""
+    """Download image, validate dimensions, and save to uploads directory."""
     errors = []
+    warnings = []
     try:
         dprint("Downloading image:", url)
         resp = requests.get(url, timeout=20)
         resp.raise_for_status()
         ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip()
         dprint(f"Content-Type: {ctype}")
+        
+        image_bytes = resp.content
         
         ext = CONTENT_TYPE_TO_EXT.get(ctype) or mimetypes.guess_extension(ctype) or Path(url).suffix or ".png"
         dprint(f"Determined extension: {ext}")
@@ -298,17 +375,31 @@ def _download_and_save_image(url: str, issue_number: int) -> tuple[str, list[str
             dprint(error_msg)
             return "", errors
         
+        # Validate image dimensions
+        is_valid, dimension_messages = validate_image_dimensions(image_bytes)
+        if not is_valid:
+            # Critical dimension errors
+            errors.extend(dimension_messages)
+            return "", errors
+        else:
+            # Add warnings/recommendations (non-blocking)
+            warnings.extend(dimension_messages)
+        
         fname = f"{issue_number}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}"
         ensure_dirs(UPLOADS_DIR)
         path = UPLOADS_DIR / fname
-        path.write_bytes(resp.content)
+        path.write_bytes(image_bytes)
         rel = f"uploads/{fname}"
         dprint("Saved image to", path, "→", rel)
-        return rel, []
+        
+        # Return warnings as part of the error list (but don't fail)
+        return rel, warnings
+        
     except Exception as e:
         error_msg = f"Failed to download image from {url}: {str(e)}"
         errors.append(error_msg)
         dprint(error_msg)
+        return "", errors
         return "", errors
 
 def download_image_if_present(markdown_or_html: str, validate_only: bool = False) -> tuple[str, list[str]]:
@@ -541,6 +632,16 @@ def _post_validation_error(issue_obj: Any, validation_errors: list[str]) -> None
     error_message += "- **Images in content**: You CAN include images in description/content fields, just make sure they're valid image formats\n"
     error_message += "\n### Allowed Image Formats:\n"
     error_message += "✅ " + ", ".join(sorted(ALLOWED_IMAGE_FORMATS)) + "\n"
+    error_message += "\n### 📐 Image Guidelines:\n"
+    error_message += "Images are automatically cropped to fit two layouts:\n"
+    error_message += "- **Hero view:** 2.1:1 ratio (wide) - 1400x667px\n"
+    error_message += "- **Card view:** 4:3 ratio (standard) - 800x600px\n"
+    error_message += "\n**Best practices:**\n"
+    error_message += "- Keep the main subject **centered**\n"
+    error_message += "- Use images at least **1400px wide**\n"
+    error_message += "- Avoid important content near the edges\n"
+    error_message += "- Test if your image works well when cropped to both ratios\n"
+    error_message += "\n📖 [Read full image guidelines](https://github.com/bouncmpe/bouncmpe.github.io/blob/main/.github/issue-to-md/IMAGE_GUIDELINES.md)\n"
     error_message += "\nPlease update your issue to fix these issues. The automation will run again when you edit the issue."
     
     post_issue_comment(issue_obj, error_message)
